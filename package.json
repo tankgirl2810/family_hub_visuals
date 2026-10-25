@@ -1,0 +1,20 @@
+{
+  "name": "orbit-starter",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "astronomy-engine": "^2.1.19",
+    "d3": "^7.9.0",
+    "smiles-drawer": "^2.4.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}

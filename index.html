@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Live Sky</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&display=swap">
+<style>
+  /* the Minimalist Family Hub tokens, as the hub sets them; the theme buttons below are only for testing */
+  :root{--font-label:'Archivo','Arial Narrow',sans-serif}
+  :root[data-theme="dark"]{--bg:#0a0a0a;--panel:#0f0f0f;--line:#2a2a2a;--line2:#6b6b6b;--ink:#f2f1ec;--dim:#a09f9a;--accent:#a98bff;--grid:#161616}
+  :root[data-theme="light"]{--bg:#ecebe7;--panel:#f4f3f0;--line:#cfcdc7;--line2:#7a7975;--ink:#111111;--dim:#55544f;--accent:#6236d0;--grid:#e0dfda}
+  :root[data-theme="paper"]{--bg:#f5f1e8;--panel:#f9f6ef;--line:#d8d1c2;--line2:#7a756b;--ink:#0d0d0d;--dim:#56524a;--accent:#0d0d0d;--grid:#e9e3d6}
+  :root[data-theme="blueprint"]{--bg:#f4f2ec;--panel:#f8f6f1;--line:#c8cae6;--line2:#6b70cc;--ink:#1b22b2;--dim:#4a50bf;--accent:#1b22b2;--grid:#dcddf0}
+  body{margin:0;padding:24px;background:var(--bg);color:var(--ink);font:15px/1.5 'Archivo',Arial,sans-serif}
+  .test{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px}
+  .test button{min-height:32px;padding:0 14px;border:1.5px solid var(--ink);border-radius:999px;background:transparent;color:var(--ink);font:600 13px/1 var(--font-label);font-stretch:75%;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
+  .test button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+  /* the Scope frame, as on the hub's Home page: a ruled sheet with a rounded outer edge and two header cells */
+  .dossier{display:grid;grid-template-columns:1fr 1fr;gap:1px;max-width:800px;background:var(--ink);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+  .cell{display:flex;justify-content:space-between;padding:8px 12px;background:var(--panel);font:600 12px/1.2 var(--font-label);font-stretch:75%;letter-spacing:.06em;text-transform:uppercase}
+  .cell .dim{color:var(--dim)}
+  .cell{align-items:center}
+  /* a visual's modes, as a small square switch in the header cell; the pressed side is solid ink */
+  .seg{display:inline-flex;border:1px solid var(--ink)}
+  .seg[hidden]{display:none}
+  .seg button{padding:3px 9px 2px;border:0;background:transparent;color:var(--ink);font:inherit;letter-spacing:inherit;text-transform:inherit;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--ink)}
+  .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+  .seg button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+  .art{grid-column:1/-1;line-height:0;background:var(--bg)}
+  canvas{display:block;width:100%;height:auto}
+</style>
+</head>
+<body>
+<div class="test" role="group" aria-label="Theme (testing only)">
+  <button type="button" data-theme-btn="dark" aria-pressed="true">Dark</button>
+  <button type="button" data-theme-btn="light" aria-pressed="false">Light</button>
+  <button type="button" data-theme-btn="paper" aria-pressed="false">Paper</button>
+  <button type="button" data-theme-btn="blueprint" aria-pressed="false">Blueprint</button>
+</div>
+
+<div class="dossier">
+  <div class="cell"><span>Scope</span><span class="dim">Online</span></div>
+  <div class="cell"><span id="visual-name"></span><span class="seg" id="visual-modes" role="group" hidden></span></div>
+  <div class="art"><canvas id="sky" width="800" height="340" role="img" aria-label="Today's visual"></canvas></div>
+</div>
+
+<!-- Astronomy Engine, installed with npm; its browser build defines a global called Astronomy -->
+<script src="node_modules/astronomy-engine/astronomy.browser.min.js"></script>
+<script src="node_modules/d3/dist/d3.min.js"></script>
+<script src="node_modules/topojson-client/dist/topojson-client.min.js"></script>
+<script src="node_modules/smiles-drawer/dist/smiles-drawer.min.js"></script>
+<!-- home for Weather and the globe, kept out of the shared files (see place.local.example.js) -->
+<script src="place.local.js"></script>
+<!-- every visual adds itself to window.VISUALS; to add another, drop a file in visuals/ and list it here -->
+<script src="visuals/transit-line.js"></script>
+<script src="visuals/live-sky.js"></script> 
+<script src="visuals/cells.js"></script>
+<script src="visuals/earthquake.js"></script>
+<script src="visuals/weather.js"></script>
+
+<script src="visuals/molecule.js"></script>
+<script src="daily.js"></script>
+<script>
+  // start today's visual
+  const today = visualForDay(VISUALS);
+  document.getElementById('visual-name').textContent = today.name;
+  document.getElementById('sky').setAttribute('aria-label', today.name + ', today\'s visual');
+  const control = today.draw(document.getElementById('sky'));
+
+  // if the visual has modes (Live sky: the journey and today), show them as a switch in the header
+  if (today.modes && control) {
+    const seg = document.getElementById('visual-modes');
+    seg.setAttribute('aria-label', today.name + ' view');
+    seg.innerHTML = today.modes.map(([id, label]) => '<button type="button" data-mode="' + id + '">' + label + '</button>').join('');
+    const show = () => seg.querySelectorAll('[data-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === control.mode())));
+    seg.addEventListener('click', e => { const b = e.target.closest('[data-mode]'); if (b) { control.setMode(b.dataset.mode); show(); } });
+    seg.hidden = false; show();
+  }
+</script>
+<script>
+  // testing only: switch themes to check the drawing follows them
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-theme-btn]'); if (!b) return;
+    document.documentElement.dataset.theme = b.dataset.themeBtn;
+    document.querySelectorAll('[data-theme-btn]').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  });
+</script>
+</body>
+</html>

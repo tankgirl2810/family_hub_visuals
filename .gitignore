@@ -1,0 +1,4 @@
+# Installed with npm; Family Hub brings its own copies of these libraries.
+node_modules/
+# Your home town, for the test page only.
+place.local.js
