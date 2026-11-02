@@ -57,6 +57,20 @@ both places:
 Another library a visual needs goes in a `lib/` folder here (its `.js` files load before the visuals).
 Data from the internet must come from a site that allows it (CORS), like the USGS and Open-Meteo feeds.
 
+## Brisbane transit timetable
+
+`visuals/transit.js` (Brisbane transit) runs from `lib/seq-transit.js`, Translink's train and ferry
+timetable packed small. Translink publishes about two months at a time; once the file runs out, the
+visual borrows the timetable's first date on the same weekday, so it keeps working, just less exactly
+(holidays and timetable changes won't show). To bring it up to date:
+
+```
+python tools/build-transit.py
+```
+
+It downloads the latest timetable (35 MB, kept only in memory) and writes `lib/seq-transit.js`.
+Data: Translink, CC BY 4.0. The visual shows that credit; keep it if you change the visual.
+
 ## Size and shape
 
 The canvas takes its size from the page's CSS. With `width: 100%; height: auto` it keeps the 800 × 340
