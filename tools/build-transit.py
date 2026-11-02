@@ -8,6 +8,9 @@ browser. This keeps only trains and ferries and packs them small:
   patterns   a run of stations with the minutes between them; many trips share one
   trips      for each service: its trips' patterns and start times
   days       which services run on each date the timetable covers
+  bus        buses in greater Brisbane, more simply: each route's path, and for a typical weekday,
+             Saturday and Sunday, each trip's path, start and running time (a bus moves along its
+             path at an even pace; the full bus timetable would be far too big)
 
 Run it again when Translink's timetable changes (it covers about two months at a time). Python 3, no
 packages needed:
@@ -26,6 +29,8 @@ FEED = 'https://gtfsrt.api.translink.com.au/GTFS/SEQ_GTFS.zip'
 OUT = Path(__file__).resolve().parent.parent / 'lib' / 'seq-transit.js'
 MODES = {'2': 'rail', '4': 'ferry'}            # GTFS route types kept
 SIMPLIFY = 0.00025                             # how far (degrees, about 25 m) a line may stray when simplified
+BUS_SIMPLIFY = 0.0012                          # the same for bus routes (about 120 m, a pixel or so on the map)
+BUS_AREA = (152.75, -27.75, 153.30, -27.20)    # buses kept: routes passing through this box (west, south, east, north)
 
 # the lines, as Translink names them, by the station at the far end; each one's stations are found by
 # following the track from there to Central. One is picked as "line of the day".
@@ -77,6 +82,26 @@ def simplify(pts, tol):
     return [pts[i] for i in sorted(keep)]
 
 
+d8 = lambda s: date(int(s[:4]), int(s[4:6]), int(s[6:]))
+
+
+def running(z, wanted):
+    """which of the wanted services run on each date: the weekly calendar, then the one-off changes"""
+    runs = defaultdict(set)
+    for c in table(z, 'calendar.txt'):
+        if c['service_id'] not in wanted:
+            continue
+        d, end = d8(c['start_date']), d8(c['end_date'])
+        while d <= end:
+            if c[['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][d.weekday()]] == '1':
+                runs[d.strftime('%Y%m%d')].add(c['service_id'])
+            d += timedelta(days=1)
+    for c in table(z, 'calendar_dates.txt'):
+        if c['service_id'] in wanted:
+            (runs[c['date']].add if c['exception_type'] == '1' else runs[c['date']].discard)(c['service_id'])
+    return runs
+
+
 def main():
     src = sys.argv[1] if len(sys.argv) > 1 else None
     if src:
@@ -88,19 +113,38 @@ def main():
     routes = {r['route_id']: MODES[r['route_type']] for r in table(z, 'routes.txt') if r['route_type'] in MODES}
     trips = {t['trip_id']: t for t in table(z, 'trips.txt') if t['route_id'] in routes}
     print(len(trips), 'train and ferry trips')
+    feed = next(table(z, 'feed_info.txt'))
+
+    # buses: a typical weekday (the first Wednesday), Saturday and Sunday in the timetable
+    bus_routes = {r['route_id'] for r in table(z, 'routes.txt') if r['route_type'] == '3'}
+    all_bus = {t['trip_id']: t for t in table(z, 'trips.txt') if t['route_id'] in bus_routes}
+    bus_runs = running(z, {t['service_id'] for t in all_bus.values()})
+    bus_days, d = {}, d8(feed['feed_start_date'])
+    while len(bus_days) < 3 and d <= d8(feed['feed_end_date']):
+        kind = {2: 'wk', 5: 'sa', 6: 'su'}.get(d.weekday())
+        if kind and kind not in bus_days and bus_runs.get(d.strftime('%Y%m%d')):
+            bus_days[kind] = d.strftime('%Y%m%d')
+        d += timedelta(days=1)
+    bus_trips = {tid: t for tid, t in all_bus.items() if any(t['service_id'] in bus_runs[k] for k in bus_days.values())}
+    print(len(bus_trips), 'bus trips on', bus_days)
 
     # every stop belongs to a station (its parent); a stop with no parent is its own station
     stops = {s['stop_id']: s for s in table(z, 'stops.txt')}
     station_of = lambda sid: stops[sid]['parent_station'] or sid
 
     # the stops of every kept trip, in order (stop_times is large, so read it once, keeping only those)
-    calls = defaultdict(list)
+    # (for a bus, only when it leaves its first stop and reaches its last)
+    calls, bus_span = defaultdict(list), {}
     for r in table(z, 'stop_times.txt'):
         if r['trip_id'] in trips:
             calls[r['trip_id']].append((int(r['stop_sequence']), station_of(r['stop_id']), secs(r['arrival_time']), secs(r['departure_time'])))
+        elif r['trip_id'] in bus_trips:
+            n, sp = int(r['stop_sequence']), bus_span.setdefault(r['trip_id'], [1e9, 0, -1, 0])
+            if n < sp[0]: sp[0], sp[1] = n, secs(r['departure_time'])
+            if n > sp[2]: sp[2], sp[3] = n, secs(r['arrival_time'])
 
     # only the shapes those trips use
-    shape_ids = {t['shape_id'] for t in trips.values()}
+    shape_ids = {t['shape_id'] for t in trips.values()} | {t['shape_id'] for t in bus_trips.values()}
     shapes = defaultdict(list)
     for r in table(z, 'shapes.txt'):
         if r['shape_id'] in shape_ids:
@@ -155,20 +199,10 @@ def main():
         trip_rows.append([pattern_ix[key], service_ix[t['service_id']], t0 // 15])
     trip_rows.sort(key=lambda r: (r[1], r[2]))
 
-    # which services run on each date: the weekly calendar, then the one-off additions and removals
+    # which services run on each date
     runs = defaultdict(set)
-    d8 = lambda s: date(int(s[:4]), int(s[4:6]), int(s[6:]))
-    for c in table(z, 'calendar.txt'):
-        if c['service_id'] not in service_ix:
-            continue
-        d, end = d8(c['start_date']), d8(c['end_date'])
-        while d <= end:
-            if c[['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'][d.weekday()]] == '1':
-                runs[d.strftime('%Y%m%d')].add(service_ix[c['service_id']])
-            d += timedelta(days=1)
-    for c in table(z, 'calendar_dates.txt'):
-        if c['service_id'] in service_ix:
-            (runs[c['date']].add if c['exception_type'] == '1' else runs[c['date']].discard)(service_ix[c['service_id']])
+    for k, v in running(z, set(service_ix)).items():
+        runs[k] = {service_ix[x] for x in v}
     days = {k: sorted(v) for k, v in sorted(runs.items()) if v}
 
     # each line's stations: the stopping-all-stations run from its far end to Central, taken from the
@@ -188,7 +222,36 @@ def main():
         else:
             print('  line skipped, no train runs from', end_name, 'to', CITY)
 
-    feed = next(table(z, 'feed_info.txt'))
+    # bus paths: each route shape that passes through the area, simplified, as whole 1/10000 degrees
+    # stored as steps from the point before (smaller to write down)
+    w, so, e, n = BUS_AREA
+    paths, path_ix = [], {}
+    def bus_path(shape_id):
+        if shape_id not in path_ix:
+            pts = shapes.get(shape_id)
+            if not pts or not any(w < x < e and so < y < n for x, y in pts):
+                path_ix[shape_id] = None
+            else:
+                flat, px, py = [], 0, 0
+                for x, y in simplify(pts, BUS_SIMPLIFY):
+                    ix, iy = round(x * 1e4), round(y * 1e4); flat += [ix - px, iy - py]; px, py = ix, iy
+                path_ix[shape_id] = len(paths); paths.append(flat)
+        return path_ix[shape_id]
+    bus = {'paths': paths}
+    for kind, day in bus_days.items():
+        rows = []
+        for tid, t in bus_trips.items():
+            if t['service_id'] in bus_runs[day] and tid in bus_span:
+                pi = bus_path(t['shape_id'])
+                if pi is not None:
+                    start, end = bus_span[tid][1] // 60, bus_span[tid][3] // 60
+                    rows.append((start, pi, max(1, end - start)))
+        rows.sort()
+        # per trip: path, minutes since the previous trip's start, minutes it runs for
+        bus[kind] = [v for k, r in enumerate(rows) for v in (r[1], r[0] - (rows[k - 1][0] if k else 0), r[2])]
+        print(f'  buses, {kind} ({day}): {len(rows)} trips')
+    print(f'  {len(paths)} bus paths')
+
     data = {
         'source': 'Translink GTFS, CC BY 4.0', 'from': feed['feed_start_date'], 'to': feed['feed_end_date'],
         'stations': [[n.replace(' station', '').replace(' ferry terminal', ''), x, y] for n, x, y in station_list],
@@ -197,10 +260,10 @@ def main():
         # per service: pattern, then minutes... (quarter minutes) since the previous trip's start, for each trip
         'trips': [[v for k, r in enumerate(rows) for v in (r[0], r[2] - (rows[k - 1][2] if k else 0))]
                   for svc in range(len(services)) for rows in [[r for r in trip_rows if r[1] == svc]]],
-        'days': days, 'lines': lines,
+        'days': days, 'lines': lines, 'bus': bus,
     }
     OUT.write_text(
-        '// Brisbane trains and ferries timetable, made by tools/build-transit.py from Translink\'s GTFS feed.\n'
+        '// Brisbane trains, buses and ferries timetable, made by tools/build-transit.py from Translink\'s GTFS feed.\n'
         '// Data: Translink, Creative Commons Attribution 4.0. Do not edit by hand: run the script again.\n'
         'window.SEQ_TRANSIT = ' + json.dumps(data, separators=(',', ':')) + ';\n', encoding='utf-8', newline='\n')
     print(f'{len(station_list)} stations, {len(segments)} segments, {len(patterns)} patterns, {len(trip_rows)} trips, '

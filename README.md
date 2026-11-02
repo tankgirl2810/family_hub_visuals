@@ -59,10 +59,13 @@ Data from the internet must come from a site that allows it (CORS), like the USG
 
 ## Brisbane transit timetable
 
-`visuals/transit.js` (Brisbane transit) runs from `lib/seq-transit.js`, Translink's train and ferry
-timetable packed small. Translink publishes about two months at a time; once the file runs out, the
-visual borrows the timetable's first date on the same weekday, so it keeps working, just less exactly
-(holidays and timetable changes won't show). To bring it up to date:
+`visuals/transit.js` (Brisbane transit) runs from `lib/seq-transit.js`, Translink's timetable packed
+small (about 650 KB, 120 KB compressed). Trains and ferries keep their exact times and dates. Buses in
+greater Brisbane are simpler: each route's path, plus a typical weekday, Saturday and Sunday, with each
+bus moving at an even pace from its first stop to its last. Translink publishes about two months at a
+time; once the file runs out, trains and ferries borrow the timetable's first date on the same
+weekday, so it keeps working, just less exactly (holidays and timetable changes won't show). To bring
+it up to date:
 
 ```
 python tools/build-transit.py
