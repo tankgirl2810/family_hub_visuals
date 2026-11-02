@@ -1,7 +1,7 @@
 # Family Hub visuals
 
 The animated pictures at the top of Family Hub's Home page. Each one is a single JavaScript file in
-`visuals/` that draws on an 800 × 340 canvas in the hub's colours. Family Hub shows a different one each
+`visuals/` that draws on a canvas in the hub's colours, sized to fill whatever box it is shown in. Family Hub shows a different one each
 day (`daily.js`: never the same as yesterday's), or one an admin has pinned.
 
 ## Trying them
@@ -21,6 +21,12 @@ Weather, copy `place.local.example.js` to `place.local.js` and put your town in 
    ```js
    (window.VISUALS = window.VISUALS || []).push({ id: 'your-visual', name: 'Your visual', draw: yourVisual });
    ```
+
+   Start `draw` with `const view = fitCanvas(cv, frame), c = view.c;` and begin every frame with
+   `view.fit()`, then read the size from `view.W` and `view.H` (never `canvas.width`). `fitCanvas`
+   (`lib/fit-canvas.js`) keeps the picture sharp on any screen and lets it take any shape: you draw in
+   design pixels, at least 800 × 340, with any extra room added to `W` or `H`. `fit()` returns true when
+   the size changed, for anything worked out from it.
 
    `draw(canvas)` starts drawing and keeps going with `requestAnimationFrame` until `canvas.isConnected`
    is false. Optional extras: `modes: [['id', 'Label'], ...]` (draw then returns
@@ -50,6 +56,12 @@ both places:
 
 Another library a visual needs goes in a `lib/` folder here (its `.js` files load before the visuals).
 Data from the internet must come from a site that allows it (CORS), like the USGS and Open-Meteo feeds.
+
+## Size and shape
+
+The canvas takes its size from the page's CSS. With `width: 100%; height: auto` it keeps the 800 × 340
+shape and grows with the width. Give it a height as well (for example `height: 60vh`) and the
+picture follows the shape of the window. Either way it stays sharp.
 
 ## How Family Hub picks up changes
 

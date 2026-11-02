@@ -26,17 +26,23 @@
   const POINTS = ['N', 'NNE', 'NE', 'ENE', 'E', 'ESE', 'SE', 'SSE', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
 
   function weather(cv) {
-    const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const view = fitCanvas(cv, frame), c = view.c;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const SKY = H * 0.6;                                    // streaks above this line, the temperature chart below
     let seed = 5; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-    const streaks = Array.from({ length: 150 }, () => ({ x: rnd() * W, y: 40 + rnd() * (SKY - 50), age: rnd() }));
+    // streaks are placed as fractions of the sky, so they spread to fit when the canvas changes size
+    const streaks = Array.from({ length: 150 }, () => ({ x: rnd() * view.W, y: 40 + rnd() * (view.H * 0.6 - 50), age: rnd() }));
     PLACE = window.HUB_PLACE || null;
     if (PLACE && (!loadedAt || Date.now() - loadedAt > REFRESH)) load();
-    let secs = 0, lastT = 0;
+    let secs = 0, lastT = 0, W = view.W, H = view.H;
 
     function frame(t) {
       if (!cv.isConnected) return;
+      // keeps the canvas sharp and the size current (lib/fit-canvas.js); streaks move with a resize
+      if (view.fit()) {
+        const sx = view.W / W, sy = view.H / H; W = view.W; H = view.H;
+        for (const s of streaks) { s.x *= sx; s.y *= sy; }
+      }
+      const SKY = H * 0.6;                                  // streaks above this line, the temperature chart below
       const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0; lastT = t;
       if (!still) secs += dt;
       if (PLACE && Date.now() - loadedAt > REFRESH) load();

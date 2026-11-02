@@ -36,15 +36,18 @@
   const ago = ms => { const h = (Date.now() - ms) / 3600000; return h < 1 ? 'NOW' : h < 24 ? Math.round(h) + 'H AGO' : Math.round(h / 24) + 'D AGO'; };
 
   function earthquakes(cv) {
-    const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const view = fitCanvas(cv, frame), c = view.c;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const projection = d3.geoOrthographic().scale(H * 0.43).translate([W * 0.34, H / 2]).clipAngle(90);
+    const projection = d3.geoOrthographic().clipAngle(90);
     const path = d3.geoPath(projection, c), graticule = d3.geoGraticule10(), sphere = { type: 'Sphere' };
     if (!loadedAt || Date.now() - loadedAt > REFRESH) load();
     let secs = 0, lastT = 0;
 
     function frame(t) {
       if (!cv.isConnected) return;
+      view.fit();   // keeps the canvas sharp and the size current (lib/fit-canvas.js)
+      const W = view.W, H = view.H;
+      projection.scale(Math.min(H * 0.43, W * 0.3)).translate([W * 0.34, H / 2]);
       const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0; lastT = t;
       if (!still) secs += dt;
       if (Date.now() - loadedAt > REFRESH) load();

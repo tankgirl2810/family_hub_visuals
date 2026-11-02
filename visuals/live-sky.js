@@ -38,9 +38,10 @@ const memory = {
 };
 
 function liveSky(cv) {
-  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
-  const cx = W * 0.42, cy = H / 2, FLAT = 0.38;            // centre a little left, rings squashed to read as tilted
-  const R0 = 24, R1 = W * 0.38;                             // innermost and outermost ring widths in pixels
+  const view = fitCanvas(cv, frame), c = view.c;
+  const FLAT = 0.38, R0 = 24;                               // rings squashed to read as tilted; innermost ring width
+  // centre a little left; outermost ring width. Set by layout() from the canvas size
+  let W, H, cx, cy, R1;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
   // spread the real distances so the inner planets get room (power 0.3)
   const P = 0.3, lo = Math.pow(PLANETS[0][1], P), hi = Math.pow(PLANETS[PLANETS.length - 1][1], P);
@@ -60,11 +61,19 @@ function liveSky(cv) {
   // the Kuiper Belt, out around Pluto and past it; each dot gets a little tilt of its own so it reads as a band
   const KUIPER = Array.from({ length: 220 }, () => { const a = 36 + rnd() * 12; return [a, rnd() * 2 * Math.PI, speedAt(a), (rnd() - 0.5) * 0.12]; });
   // a sparse field of tiny star crosses, kept clear of the rings in the middle and the furniture on the right
-  const STARS = [];
-  while (STARS.length < 34) {
-    const x = 12 + rnd() * W * 0.82, y = 12 + rnd() * (H - 24), dx = (x - cx) / (R1 + 26), dy = (y - cy) / ((R1 + 26) * FLAT * 1.6);
-    if (dx * dx + dy * dy > 1 && !(x < 130 && (y < 44 || y > H - 40))) STARS.push([x, y, rnd() * 6.28, 1.5 + rnd() * 2]);
+  // (re-scattered from the same seed whenever the canvas changes size, so they stay in the empty space)
+  const starSeed = seed, STARS = [];
+  function layout() {
+    W = view.W; H = view.H;
+    cx = W * 0.42; cy = H / 2;
+    R1 = Math.min(W * 0.38, (H / 2 - 16) / FLAT);           // fits the height too, when the canvas is short and wide
+    seed = starSeed; STARS.length = 0;
+    while (STARS.length < 34) {
+      const x = 12 + rnd() * W * 0.82, y = 12 + rnd() * (H - 24), dx = (x - cx) / (R1 + 26), dy = (y - cy) / ((R1 + 26) * FLAT * 1.6);
+      if (dx * dx + dy * dy > 1 && !(x < 130 && (y < 44 || y > H - 40))) STARS.push([x, y, rnd() * 6.28, 1.5 + rnd() * 2]);
+    }
   }
+  layout();
 
   // where the journey has got to, and which mode is showing; both come back from the browser's memory
   const saved = memory.get();
@@ -76,6 +85,7 @@ function liveSky(cv) {
   let secs = 0, lastT = 0, lastSave = 0;
   function frame(t) {
     if (!cv.isConnected) { save(); removeEventListener('pagehide', save); return; }   // stops when the canvas leaves the page
+    if (view.fit()) layout();   // keeps the canvas sharp, and lays out again when it changes size (lib/fit-canvas.js)
     const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0; lastT = t;        // a hidden tab doesn't jump ahead
     if (!still) secs += dt;
     if (mode === 'journey' && !still) { sim += dt * DAYS_PER_SECOND * DAY; if (sim > Date.now()) sim = journeyStart(); }

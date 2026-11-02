@@ -24,18 +24,19 @@
   const todayIndex = () => { const d = new Date(); return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000) % MOLECULES.length; };
 
   function molecule(cv) {
-    const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const view = fitCanvas(cv, frame), c = view.c;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     const [name, smiles, formula, found] = MOLECULES[todayIndex()];
-    const PX = 36, PY = 44, PW = W * 0.54, PH = H - 80;     // the plate the molecule sits on
+    const PX = 36, PY = 44;                                  // the plate the molecule sits on (its size follows the canvas)
     const plate = document.createElement('canvas');
-    let drawnFor = '', secs = 0, lastT = 0;
+    let drawnFor = {}, sizeWanted = '', sizeSince = 0, secs = 0, lastT = 0;
 
-    // draw the molecule onto its own canvas in the page's colours; done again only when the theme changes
-    function render(INK, A, DIM, BG, LABEL) {
-      drawnFor = INK + A + BG;
+    // draw the molecule onto its own canvas in the page's colours, at the screen's own resolution (z screen
+    // pixels per design pixel) so it stays sharp; done again only when the theme or the size changes
+    function render(INK, A, DIM, BG, LABEL, PW, PH, z) {
       const drawer = new SmilesDrawer.Drawer({
-        width: PW, height: PH, padding: 24, bondThickness: 1.3, bondLength: 34, fontFamily: LABEL, fontSizeLarge: 11, fontSizeSmall: 5,
+        width: Math.round(PW * z), height: Math.round(PH * z), padding: 24 * z, bondThickness: 1.3 * z, bondLength: 34 * z,
+        fontFamily: LABEL, fontSizeLarge: 11 * z, fontSizeSmall: 5 * z,
         themes: { hub: { C: INK, O: A, N: A, F: A, CL: A, BR: A, I: A, P: A, S: A, B: A, SI: A, H: DIM, BACKGROUND: BG } },
       });
       SmilesDrawer.parse(smiles, tree => drawer.draw(tree, plate, 'hub', false), () => {});
@@ -43,12 +44,20 @@
 
     function frame(t) {
       if (!cv.isConnected) return;
+      view.fit();   // keeps the canvas sharp and the size current (lib/fit-canvas.js)
+      const W = view.W, H = view.H, PW = W * 0.54, PH = H - 80;
       const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0; lastT = t;
       if (!still) secs += dt;
       const cs = getComputedStyle(document.documentElement), v = k => cs.getPropertyValue(k).trim();
       const INK = v('--ink'), D = v('--line2'), L = v('--line'), G = v('--grid') || L, A = v('--accent'), BG = v('--bg'), DIM = v('--dim') || D;
       const LABEL = v('--font-label') || 'sans-serif';
-      if (drawnFor !== INK + A + BG) render(INK, A, DIM, BG, LABEL);
+      // redraw the plate straight away for a new theme; for a new size, once the size has settled for a moment
+      // (dragging a window edge would otherwise redraw the molecule every frame)
+      const theme = INK + A + BG, plateSize = [Math.round(PW), Math.round(PH), view.k.toFixed(2)].join();
+      if (plateSize !== sizeWanted) { sizeWanted = plateSize; sizeSince = t; }
+      if (theme !== drawnFor.theme || (plateSize !== drawnFor.size && t - sizeSince > 250)) {
+        drawnFor = { theme, size: plateSize }; render(INK, A, DIM, BG, LABEL, PW, PH, view.k);
+      }
       const text = (s, x, y, col, size, weight = 600, stretch = 'condensed') => { c.fillStyle = col; c.font = weight + ' ' + size + 'px ' + LABEL; c.fontStretch = stretch; c.fillText(s, x, y); };
 
       c.fillStyle = BG; c.fillRect(0, 0, W, H);
@@ -84,7 +93,8 @@
       c.fillText(line, tx, y);
 
       text('MOLECULE', 28, 28, INK, 14);
-      if (!still || !plate.width) requestAnimationFrame(frame);
+      // a still picture keeps drawing until the plate has arrived at the current size
+      if (!still || drawnFor.size !== sizeWanted || plate.width !== Math.round(PW * view.k)) requestAnimationFrame(frame);
     }
     requestAnimationFrame(frame);
   }

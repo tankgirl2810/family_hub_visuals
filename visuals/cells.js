@@ -7,7 +7,8 @@
   const GROW = 2.2;          // seconds a division (and an absorption) takes
 
   function cells(cv) {
-    const c = cv.getContext('2d'), W = cv.width, H = cv.height;
+    const view = fitCanvas(cv, frame), c = view.c;
+    let W = view.W, H = view.H;
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     let seed = 23; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const ease = k => k < 0 ? 0 : k > 1 ? 1 : k * k * (3 - 2 * k);
@@ -28,6 +29,11 @@
       if (!cv.isConnected) return;
       const dt = lastT ? Math.min(0.1, (t - lastT) / 1000) : 0; lastT = t;
       if (!still) secs += dt;
+      // the canvas changed size: move every nucleus with it
+      if (view.fit()) {
+        const sx = view.W / W, sy = view.H / H; W = view.W; H = view.H;
+        for (const p of cellsList) { p.x *= sx; p.y *= sy; if (p.from) p.from = [p.from[0] * sx, p.from[1] * sy]; }
+      }
 
       // one cell divides: a daughter grows out from its parent; elsewhere one cell is absorbed by a neighbour
       if (!still && secs > nextDivide) {

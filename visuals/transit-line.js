@@ -6,15 +6,16 @@ const TIME_STEP_MILLIS = 86400000 * 0.5; // Moves forward half a day per frame s
 const START_TRANSIT = new Date();
 
 function transitLine(cv) {
-  const c = cv.getContext('2d'), W = cv.width, H = cv.height;
-  const cx = W / 2, cy = H / 2;
-  const scaleX = W * 0.45; // Max elongation (~48° for Venus) mapped near the canvas edge
+  const view = fitCanvas(cv, frame), c = view.c;
   const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let t0 = 0;
   function frame(t) {
     if (!cv.isConnected) return;
     if (!t0) t0 = t;
+    view.fit();   // keeps the canvas sharp and the size current (lib/fit-canvas.js)
+    const W = view.W, H = view.H, cx = W / 2;
+    const scaleX = W * 0.45; // Max elongation (~48° for Venus) mapped near the canvas edge
 
     // Shift window base over time or remain static
     const elapsedDays = still ? 0 : ((t - t0) / 1000);

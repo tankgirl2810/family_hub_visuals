@@ -17,7 +17,7 @@
   .test button{min-height:32px;padding:0 14px;border:1.5px solid var(--ink);border-radius:999px;background:transparent;color:var(--ink);font:600 13px/1 var(--font-label);font-stretch:75%;letter-spacing:.05em;text-transform:uppercase;cursor:pointer}
   .test button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
   /* the Scope frame, as on the hub's Home page: a ruled sheet with a rounded outer edge and two header cells */
-  .dossier{display:grid;grid-template-columns:1fr 1fr;gap:1px;max-width:800px;background:var(--ink);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
+  .dossier{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--ink);border:1.5px solid var(--ink);border-radius:12px;overflow:hidden}
   .cell{display:flex;justify-content:space-between;padding:8px 12px;background:var(--panel);font:600 12px/1.2 var(--font-label);font-stretch:75%;letter-spacing:.06em;text-transform:uppercase}
   .cell .dim{color:var(--dim)}
   .cell{align-items:center}
@@ -29,7 +29,9 @@
   .seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
   .seg button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
   .art{grid-column:1/-1;line-height:0;background:var(--bg)}
-  canvas{display:block;width:100%;height:auto}
+  /* the picture fills the window below the buttons, so resizing the window checks it follows any shape;
+     lib/fit-canvas.js keeps it sharp. (width:100%; height:auto also works: it then keeps the 800 × 340 shape) */
+  canvas{display:block;width:100%;height:max(200px, calc(100vh - 150px))}
 </style>
 </head>
 <body>
@@ -53,6 +55,8 @@
 <script src="node_modules/smiles-drawer/dist/smiles-drawer.min.js"></script>
 <!-- home for Weather and the globe, kept out of the shared files (see place.local.example.js) -->
 <script src="place.local.js"></script>
+<!-- lib/: helpers the visuals share (Family Hub loads these before the visuals too) -->
+<script src="lib/fit-canvas.js"></script>
 <!-- every visual adds itself to window.VISUALS; to add another, drop a file in visuals/ and list it here -->
 <script src="visuals/transit-line.js"></script>
 <script src="visuals/live-sky.js"></script> 
@@ -64,7 +68,9 @@
 <script src="daily.js"></script>
 <script>
   // start today's visual
-  const today = visualForDay(VISUALS);
+  // (testing: index.html?v=cells shows one visual by its id, whatever the day)
+  const asked = new URLSearchParams(location.search).get('v');
+  const today = VISUALS.find(x => x.id === asked) || visualForDay(VISUALS);
   document.getElementById('visual-name').textContent = today.name;
   document.getElementById('sky').setAttribute('aria-label', today.name + ', today\'s visual');
   const control = today.draw(document.getElementById('sky'));
